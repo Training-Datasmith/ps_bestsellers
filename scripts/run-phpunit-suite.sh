@@ -6,9 +6,8 @@ cd "$ROOT"
 
 PHP_IMAGE_544='php@sha256:8fd934196b1eb1cdc32f3301801272b6d1343186d842c244cf3fcb62ac200fc5'
 PHP_IMAGE_564='php@sha256:36c3c974e6ee402fdf62d52d3fb918ad97653661e10d9b59dac86b5f1fc52dd3'
-# Fallback when legacy v1 manifests or pinned blob layout cannot unpack on containerd >= 2.1
-PHP_IMAGE_564_FALLBACK='php:5.6.40-cli'
-PHP_IMAGE_564_FALLBACK_DIGEST='sha256:6ce95208609dc66df163ab936c970b3b34cd901b85c747102c5999f08ade9143'
+# Pinned 5.6.40-cli when plan digests cannot be pulled or run (containerd >= 2.1)
+PHP_IMAGE_564_PINNED='php@sha256:6ce95208609dc66df163ab936c970b3b34cd901b85c747102c5999f08ade9143'
 PHPUNIT_PHAR='/tmp/phpunit-4.8.36.phar'
 PHPUNIT_ASC='/tmp/phpunit-4.8.36.phar.asc'
 PHPUNIT_SHA='ab8bc3017a64cf75a2112f5e089a1d5b0c4cc2116556d60c1af5e3f584e85c5e'
@@ -43,9 +42,13 @@ select_image() {
     echo "Using PHP 5.6.40-cli image $PHP_IMAGE"
     return
   fi
-  echo "DEVIATION: plan php:5.6.40-cli digest failed to run; using tag ${PHP_IMAGE_564_FALLBACK} (${PHP_IMAGE_564_FALLBACK_DIGEST})" >&2
-  "${DOCKER[@]}" pull "$PHP_IMAGE_564_FALLBACK"
-  PHP_IMAGE="${PHP_IMAGE_564_FALLBACK}"
+  echo "DEVIATION: plan php:5.6.40-cli digest failed; using pinned ${PHP_IMAGE_564_PINNED}" >&2
+  "${DOCKER[@]}" pull "$PHP_IMAGE_564_PINNED"
+  if ! "${DOCKER[@]}" run --rm "$PHP_IMAGE_564_PINNED" php -v >/dev/null 2>&1; then
+    echo "ERROR: pinned PHP 5.6 image ${PHP_IMAGE_564_PINNED} could not run" >&2
+    exit 1
+  fi
+  PHP_IMAGE="$PHP_IMAGE_564_PINNED"
 }
 
 run_once() {

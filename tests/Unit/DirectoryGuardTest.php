@@ -2,27 +2,7 @@
 
 class DirectoryGuardTest extends PHPUnit_Framework_TestCase
 {
-    public static $headerChecksSupported = true;
-    public static $headerCheckNote = '';
-
-    public static function probeHeaderSupport()
-    {
-        $root = dirname(dirname(__DIR__));
-        $dump = $root . '/tests/Support/dump-headers.php';
-        $target = $root . '/index.php';
-        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($dump) . ' ' . escapeshellarg($target);
-        $json = shell_exec($cmd);
-        $headers = json_decode(trim($json), true);
-        if (!is_array($headers) || count($headers) === 0) {
-            self::$headerChecksSupported = false;
-            self::$headerCheckNote = 'headers_list() empty under CLI; header assertions skipped';
-        }
-    }
-
-    public static function setUpBeforeClass()
-    {
-        self::probeHeaderSupport();
-    }
+    const CGI_BINARY = '/usr/local/bin/php-cgi';
 
     public static function guardPaths()
     {
@@ -41,16 +21,9 @@ class DirectoryGuardTest extends PHPUnit_Framework_TestCase
 
     public function testGuardScripts()
     {
-        self::probeHeaderSupport();
-        $dump = dirname(dirname(__DIR__)) . '/tests/Support/dump-headers.php';
+        $this->assertTrue(is_executable(self::CGI_BINARY), self::CGI_BINARY . ' must exist for guard checks');
         foreach (self::guardPaths() as $path) {
-            $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($dump) . ' ' . escapeshellarg($path);
-            $json = shell_exec($cmd);
-            $headers = json_decode(trim($json), true);
-            $this->assertTrue(is_array($headers), $path);
-            if (!self::$headerChecksSupported) {
-                continue;
-            }
+            $headers = $this->fetchGuardHeaders($path);
             $this->assertContains('Expires: Mon, 26 Jul 1997 05:00:00 GMT', $headers, $path);
             $this->assertContains('Cache-Control: no-store, no-cache, must-revalidate', $headers, $path);
             $this->assertContains('Cache-Control: post-check=0, pre-check=0', $headers, $path);
@@ -68,5 +41,37 @@ class DirectoryGuardTest extends PHPUnit_Framework_TestCase
             $this->assertTrue(is_int($ts), $path);
             $this->assertTrue(abs(time() - $ts) <= 120, $path);
         }
+    }
+
+    /**
+     * @param string $path
+     * @return array
+     */
+    private function fetchGuardHeaders($path)
+    {
+        $cmd = escapeshellarg(self::CGI_BINARY) . ' ' . escapeshellarg($path);
+        $output = shell_exec($cmd);
+        $this->assertTrue(is_string($output) && $output !== '', $path . ' produced no php-cgi output');
+
+        $parts = preg_split("/\r?\n\r?\n/", $output, 2);
+        $this->assertTrue(is_array($parts) && isset($parts[0]) && $parts[0] !== '', $path . ' missing CGI header block');
+
+        $headers = array();
+        foreach (preg_split("/\r?\n/", $parts[0]) as $line) {
+            if ($line === '') {
+                continue;
+            }
+            if (strpos($line, ':') === false) {
+                continue;
+            }
+            if (stripos($line, 'Status:') === 0) {
+                continue;
+            }
+            $headers[] = $line;
+        }
+
+        $this->assertTrue(count($headers) > 0, $path . ' must emit response headers under php-cgi');
+
+        return $headers;
     }
 }

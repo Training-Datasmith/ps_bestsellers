@@ -11,6 +11,7 @@ if (getenv('PS_BESTSELLERS_ASSEMBLE_BULK') === false || getenv('PS_BESTSELLERS_A
 }
 
 define('_PS_VERSION_', getenv('PS_VERSION_UNDER_TEST'));
+date_default_timezone_set('UTC');
 
 $testDir = __DIR__;
 $root = dirname($testDir);
